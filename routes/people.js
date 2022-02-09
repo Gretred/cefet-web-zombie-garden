@@ -15,6 +15,9 @@ router.get('/', async (req, res, next) => {
       // descrição: https://github.com/felixge/node-mysql#joins-with-overlapping-column-names
       nestTables: true
     })
+    const contexto = {
+      people
+    }
 
     
     // Exercício 3: negociação de conteúdo para esta resposta
@@ -26,10 +29,13 @@ router.get('/', async (req, res, next) => {
     //   - por exemplo, assim que uma pessoa é excluída, uma mensagem de
     //     sucesso pode ser mostrada
     // - error: idem para mensagem de erro
-    res.render('list-people', {
-      people,
-      success: req.flash('success'),
-      error: req.flash('error')
+    res.format({
+      html: () => res.render('list-people', {
+        people,
+        success: req.flash('success'),
+        error: req.flash('error')
+      }, contexto),
+      json: () => res.send(people)
     })
 
   } catch (error) {
@@ -89,6 +95,36 @@ router.get('/new/', (req, res) => {
 //      - Em caso de sucesso do INSERT, colocar uma mensagem feliz
 //      - Em caso de erro do INSERT, colocar mensagem vermelhinha
 
+router.post('/', async (req, res, next) => {
+  try {
+    const transaction = await db.getConnection();
+    await transaction.beginTransaction();
+    const personName = req.body.name
+
+    const [insertResult] = await transaction.execute(
+      `INSERT INTO person (id, name, alive)
+       VALUES (NULL, ?, 1)`,
+      [personName]
+    )
+
+    if (!insertResult || insertResult.affectedRows < 1) {
+      throw new Error(`a pessoa ${personName} foi adicionada ao jardim`)
+    }
+    await transaction.commit()
+
+    res.format({
+      html: () => {
+        req.flash('success', `Uma pessoa entrou no jardim`)
+        res.redirect('/people')
+      },
+      json: () => res.status(200).send({})
+    })
+  } catch (error) {
+    console.error(error)
+    error.friendlyMessage = `Erro desconhecido ao excluir a pessoa ${req.params.id}`
+    next(error)
+  } 
+})
 
 /* DELETE uma pessoa */
 // Exercício 2: IMPLEMENTAR AQUI
@@ -98,5 +134,36 @@ router.get('/new/', (req, res) => {
 //      - Em caso de sucesso do INSERT, colocar uma mensagem feliz
 //      - Em caso de erro do INSERT, colocar mensagem vermelhinha
 
+
+router.delete('/:id/', async (req, res, next) => {
+  try {
+    const transaction = await db.getConnection();
+    await transaction.beginTransaction();
+
+    const [deleteResult] = await transaction.execute(
+      `DELETE
+       FROM person
+       WHERE id=?`,
+      [req.params.id]
+    );
+
+    if (!deleteResult || deleteResult.affectedRows < 1) {
+      throw new Error(`Não excluiu a pessoa com id ${req.params.id}`)
+    }
+    await transaction.commit()
+
+    res.format({
+      html: () => {
+        req.flash('success', `Uma pessoa deixou o jardim`)
+        res.redirect('/people')
+      },
+      json: () => res.status(200).send({})
+    })
+  } catch (error) {
+    console.error(error)
+    error.friendlyMessage = `Erro desconhecido ao excluir a pessoa ${req.params.id}`
+    next(error)
+  } 
+})
 
 export default router
